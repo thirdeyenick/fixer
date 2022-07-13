@@ -35,7 +35,7 @@ func NewClient(options ...func(*Client)) *Client {
 			Timeout: 20 * time.Second,
 		},
 		baseURL: &url.URL{
-			Scheme: "http",
+			Scheme: "https",
 			Host:   "data.fixer.io",
 			Path:   "/api",
 		},
