@@ -20,11 +20,23 @@ var ExratesClient = NewClient(BaseURL("https://api.exchangeratesapi.io"))
 // DefaultClient is the default client for the Foreign exchange rates and currency conversion API
 var DefaultClient = FixerClient
 
+type authenticationType string
+
+const (
+	fixerAuthenticationType    authenticationType = "fixer"
+	apiLayerAuthenticationType authenticationType = "apilayer"
+)
+
+type accessKey struct {
+	content            string
+	authenticationType authenticationType
+}
+
 // Client for the Foreign exchange rates and currency conversion API
 type Client struct {
 	httpClient *http.Client
 	baseURL    *url.URL
-	accessKey  string
+	accessKey  accessKey
 	userAgent  string
 }
 
@@ -39,7 +51,10 @@ func NewClient(options ...func(*Client)) *Client {
 			Host:   "data.fixer.io",
 			Path:   "/api",
 		},
-		accessKey: "",
+		accessKey: accessKey{
+			content:            "",
+			authenticationType: fixerAuthenticationType,
+		},
 		userAgent: "fixer/client.go (https://github.com/peterhellberg/fixer)",
 	}
 
@@ -69,7 +84,18 @@ func BaseURL(rawurl string) func(*Client) {
 // AccessKey sets the access key used by the client
 func AccessKey(ak string) func(*Client) {
 	return func(c *Client) {
-		c.accessKey = ak
+		c.accessKey.content = ak
+	}
+}
+
+// UseAPILayer changes the base URL and the authentication method to fixer
+// proxied by apilayer.com
+// Use this if you got your API key from apilayer.com instead of fixer
+func UseAPILayer() func(*Client) {
+	return func(c *Client) {
+		c.accessKey.authenticationType = apiLayerAuthenticationType
+		c.baseURL.Host = "api.apilayer.com"
+		c.baseURL.Path = "/fixer"
 	}
 }
 
@@ -154,8 +180,8 @@ func (c *Client) query(attributes []url.Values) url.Values {
 func (c *Client) request(ctx context.Context, path string, query url.Values) (*http.Request, error) {
 	rawurl := c.baseURL.Path + path
 
-	if c.accessKey != "" {
-		query.Set("access_key", c.accessKey)
+	if c.accessKey.content != "" && c.accessKey.authenticationType == fixerAuthenticationType {
+		query.Set("access_key", c.accessKey.content)
 	}
 
 	if len(query) > 0 {
@@ -176,6 +202,12 @@ func (c *Client) request(ctx context.Context, path string, query url.Values) (*h
 
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("User-Agent", c.userAgent)
+
+	if c.accessKey.content != "" && c.accessKey.authenticationType == apiLayerAuthenticationType {
+		// if the API key was gathered from apilayer.com then authentication
+		// works with a header
+		req.Header.Add("apikey", c.accessKey.content)
+	}
 
 	return req, nil
 }
